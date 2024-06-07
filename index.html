@@ -1,0 +1,780 @@
+<!DOCTYPE html>
+<html><head><title>dubious disk</title>
+<style>
+div#main {
+	position:fixed;
+	top:0;
+	left:0;
+	width:100%;
+	height:100%;
+	z-index:-1;
+}
+
+canvas {
+	position:fixed;
+	top:0;
+	left:0;
+	width:100%;
+	height:100%;
+	z-index:-1;
+}
+
+@font-face {
+    font-family: 'topazplus';
+    src: url('topazplus_a1200_v1.0-webfont.eot');
+    src: url('topazplus_a1200_v1.0-webfont.eot?#iefix') format('embedded-opentype'),
+         url('topazplus_a1200_v1.0-webfont.woff2') format('woff2'),
+         url('topazplus_a1200_v1.0-webfont.woff') format('woff'),
+         url('topazplus_a1200_v1.0-webfont.ttf') format('truetype'),
+         url('topazplus_a1200_v1.0-webfont.svg#topazplus_a600a1200a4000Rg') format('svg');
+    font-weight: normal;
+    font-style: normal;
+
+}
+
+div#textHdr
+{
+  font-family: "topazplus", "Lucida Console", "Courier New", monospace;
+  white-space: pre-wrap;
+}
+
+div#text
+{
+  font-family: "topazplus", "Lucida Console", "Courier New", monospace;
+  white-space: pre-wrap;
+}
+
+noscript#textNSH
+{
+  font-family: "topazplus", "Lucida Console", "Courier New", monospace;
+  white-space: pre-wrap;
+}
+
+noscript#textNS
+{
+  font-family: "topazplus", "Lucida Console", "Courier New", monospace;
+  white-space: pre-wrap;
+}
+
+a:link {
+    color: rgb(0,83,221);
+	text-decoration: none;
+}
+a:visited {
+    color: rgb(185,32,189);
+	text-decoration: none;
+}
+
+body {
+	color: white;
+	background-color: black;
+}
+</style>
+<script src="xmeffects.js"></script>
+<script src="xm.js"></script>
+<script src="codef_core.js"></script>
+<script src="codef_3d.js"></script>
+<script src="codef_scrolltext.js"></script>
+<script>
+var mycanvas;
+var scrollcanvas;
+var scroller;
+var scrollfont;
+var my3d;
+var textEffects = [false,false];
+var lastRow = false;
+var gotInput = false;
+
+var tunnel = {x:[],y:[],z:[]};
+var moveSin = {x:1, y:2};
+var savedSin = 0;
+var colourTable = [];
+
+function swap(arr, lhs, rhs) {
+	var tmp = arr[lhs];
+	arr[lhs] = arr[rhs];
+	arr[rhs] = tmp;
+}
+
+function quickSortTunnelImpl(left, right) {
+	var a = tunnel.z;
+	var b = tunnel.x;
+	var c = tunnel.y;
+	
+	var pivot = a[(left + right) >> 1];
+	var i = left, j = right;
+	while (i <= j) {
+		while (a[i] > pivot) i++;
+		while (a[j] < pivot) j--;
+		if (i > j) break;
+		swap(a, i, j);
+		swap(b, i, j);
+		swap(c, i, j);
+		i++;
+		j--;
+	}
+	if (left < j) quickSortTunnelImpl(left, j);
+	if (i < right) quickSortTunnelImpl(i, right);
+}
+
+function quickSortTunnel() { quickSortTunnelImpl(0, 31); }
+
+function doTunnel() {
+	mycanvas.fill('#000000');
+	quickSortTunnel();
+	var pixels = {x:[],y:[],z:[]};
+	var itPix = 0;
+	for (var itTunnel = 0; itTunnel < 32; itTunnel++) {
+		var currSin = savedSin;
+		for (var i = 0; i < 64; i++) {
+			var tz = tunnel.z[itTunnel];
+			pixels.x[itPix] = Math.floor(4000 * Math.sin(currSin) / tz + tunnel.x[itTunnel]);
+			pixels.y[itPix] = Math.floor(3200 * Math.cos(currSin) / tz + tunnel.y[itTunnel]);
+			pixels.z[itPix] = tunnel.z[itTunnel];
+			currSin += 2.54;
+			itPix++;
+		}
+		tunnel.z[itTunnel]--;
+		if (tunnel.z[itTunnel] == 0) {
+			tunnel.z[itTunnel] = 256;
+			tunnel.x[itTunnel] = Math.floor(itTunnel * 2 * Math.cos(moveSin.x) + 320);
+			tunnel.y[itTunnel] = Math.floor((20 + itTunnel) * Math.cos(moveSin.y) + 240);
+			moveSin.x += 0.05;
+			moveSin.y += 0.1;
+		}
+	}
+	for (var i = 0; i < pixels.z.length; i++) {
+		var cc = Math.floor(i/8);
+		var b = colourTable[255 - cc];
+		var px = pixels.x[i];
+		var py = pixels.y[i];
+		var pz = pixels.z[i];
+		if (pz == 210) continue;
+		mycanvas.plot(px, py, 1, b);
+		if (pz < 70)
+			mycanvas.plot(px + 1, py + 1, 1, b);
+		if (pz < 110)
+			mycanvas.plot(px, py + 1, 1, b);
+		if (pz < 210) {
+			mycanvas.plot(px, py, 1, b);
+			mycanvas.plot(px + 1, py, 1, b);
+		}
+	}
+	savedSin -= 0.01;
+	//tunnelCanvas.draw(mycanvas, 0, 0, 1, 0, 640/320, 480/200);
+}
+
+function intToColour(colour) {
+	var hexColour = (colour & 0x00FFFFFF).toString(16);
+	while (hexColour.length < 6)
+		hexColour = "0" + hexColour;
+	return "#" + hexColour;
+}
+
+function initColourTbl() {
+	var steps = 178;
+	
+	var sr = 202, sg = 182, sb = 223;
+	var er = 0, eg = 0, eb = 0;
+	var rdelta = (er - sr) / steps;
+	var gdelta = (eg - sg) / steps;
+	var bdelta = (eb - sb) / steps;
+	var fsr = sr, fsg = sg, fsb = sb;
+	for (var i = 0; i < steps; i++) {
+		var rgb = (fsb & 0xff) | (fsg << 8) | (fsr << 16);
+		colourTable[i] = intToColour(rgb);
+		fsr += rdelta;
+		fsg += gdelta;
+		fsb += bdelta;
+	}
+}
+
+function initTunnel() {
+	initColourTbl();
+	for (var i = 0; i < 64; i++) {
+		tunnel.z[i] = i * 8 + 8;
+		tunnel.x[i] = Math.floor(i * 2 * Math.cos(moveSin.x) + 1320);
+		tunnel.y[i] = Math.floor(40 * Math.cos(moveSin.y) + 1240);
+		moveSin.x += 0.1;
+		moveSin.y += 0.05;
+	}
+}
+
+var previousTimeStamp = undefined;
+function doCanvas(timeStamp) {
+	var doFrame = false;
+	if (previousTimeStamp == undefined) {
+		doFrame = true;
+	} else {
+		var elapsed = timeStamp - previousTimeStamp;
+		doFrame = (elapsed >= Math.abs(1000/60));
+	}
+	if (doFrame) {
+	previousTimeStamp = timeStamp;
+	doTunnel();
+    my3d.group.rotation.y+=0.03;
+    my3d.draw();
+	scrollcanvas.clear();
+	scroller.draw(480 - 32);
+	scrollcanvas.draw(mycanvas, 240, 0);
+	//my3dcanvas.draw(mycanvas, tunnelTop.x, tunnelTop.y);
+}
+	requestAnimFrame(doCanvas);
+}
+
+var writingText = "";
+
+function doFirstPart(callback) {
+	var writer = function(callback) {
+		var cursor = "<div style='vertical-align: top; display: inline-block; background-color: white;'> </div>";
+		var textHdr = document.getElementById('textHdr');
+		var currtext = textHdr.innerHTML;
+		if (currtext == "") textHdr.innerHTML = cursor;
+		else currtext = currtext.substring(0,currtext.length - cursor.length);
+		if (writingText == "") {
+			textHdr.innerHTML = currtext;
+			callback();
+			return;
+		}
+		currtext += writingText.substring(0,7);
+		currtext += cursor;
+		textHdr.innerHTML = currtext;
+		writingText = writingText.substring(7);
+		setTimeout(function() { writer(callback); },10);
+	};
+	var textNSH = document.getElementById('textNSH').innerHTML.substr(1);
+		var decodedtext = htmlDecode(textNSH).split("\n");
+		decodedtext.shift();
+	writingText = textNSH.split("\n")[0] + "\n" + decodedtext.join("\n");
+	writer(callback);
+}
+
+function htmlDecode(input) {
+	try {
+		return new DOMParser().parseFromString(input, "text/html").documentElement.textContent;
+	} catch (ex) {
+		// hacks, and more hacks
+		return input.replace(new RegExp("&lt;a",'g'),"<a").replace(new RegExp("&lt;/",'g'),"</").replace(new RegExp('"&gt;','g'),'">').replace(new RegExp("a&gt;",'g'),"a>");
+	}
+}
+
+function doSecondPart(callback) {
+	var writer = function(opacity,callback) {
+		// ugh, hacks to work around shit
+		var textNS = document.getElementById('textNS').innerHTML.substr(1);
+		var decodedtext = textNS.split("\n");
+		decodedtext.shift();
+		var text = "<div style='vertical-align:top; display:inline-block; opacity:" + opacity + "'>" + textNS.split("\n")[0] + "\n" + decodedtext.join("\n") + "</div>";
+		document.getElementById('text').innerHTML = text;
+		if (opacity >= 1) callback();
+		else setTimeout(function() { writer(opacity+0.1,callback); },10);
+	}
+	writer(0,callback);
+}
+
+function playerCallback(e) {
+	if (e.t < window.XMPlayer.audioctx.currentTime) {
+		//console.log("event timestamp: "+e.t+" - curtime: "+window.XMPlayer.audioctx.currentTime);
+		setTimeout(function() { playerCallback(e); },10);
+		return;
+	}
+}
+
+function loadXMAndInit(xmdata) {
+	if (!XMPlayer.load(xmdata)) {
+		return;
+	}
+
+	XMView.pushEvent = playerCallback;
+	XMPlayer.play();
+	return XMPlayer.xm;
+}
+
+function downloadXM(uri,callback) {
+	var xmReq = new XMLHttpRequest();
+	xmReq.open("GET", uri, true);
+	xmReq.responseType = "arraybuffer";
+	xmReq.onload = function (xmEvent) {
+		var arrayBuffer = xmReq.response;
+		if (arrayBuffer) {
+			loadXMAndInit(arrayBuffer);
+		}
+		callback();
+	};
+	xmReq.send(null);
+}
+
+function startChip(callback) {
+	if ((window.AudioContext === undefined) && (window.webkitAudioContext === undefined)) {
+		callback();
+		return;
+	}
+	XMPlayer.init();
+	downloadXM('floppi-dreamchip_megamix2.xm',callback);
+}
+function startTro() {
+	var textHdr = document.getElementById('textHdr');
+	textHdr.innerHTML = "please click the page to continue!";
+	document.body.addEventListener("click", function() {
+	if (gotInput) return;
+	gotInput = true;
+	startChip(function() {
+		var textHdr = document.getElementById('textHdr');
+		textHdr.innerHTML = "";
+		mycanvas=new canvas(640,480,"main");
+		scrollcanvas=new canvas(480, 480);
+		//my3dcanvas = new canvas(640, 480);
+		//tunnelCanvas = new canvas(320, 200);
+		initTunnel();
+		scrollfont = new image("scrollfont.png");
+		scrollfont.initTile(16, 16, 32);
+		scroller = new scrolltext_horizontal();
+		scroller.scrtxt = " * here we go again! * typing this while back in a field for another time! i originally wrote this exploitro for the last time around - but never released it. so i guess now's the time. this one was fun to figure out all the exploitation techniques. dumping bitlocker keys - even with legacy integrity validation - was the cherry on the icing on the top of the cake: but wouldn't that sink? greets to all the other windows boot environment researchers. can't wait to see your writeups! also greets to everyone who loved the previous exploitros. sorry for the long wait this time. can there be more exploitros please - otherwise all the fun will have been sucked out of the room to so many noring corporate writeups. nothing more to say. keep reversing, no matter how much your target might not matter! until we meet again... ";
+		for (var i = 0; i < mycanvas.width / 16; i++) scroller.scrtxt += " ";
+		//scroller.scrtxt += " ".repeat(mycanvas.width / 16);
+		scroller.init(scrollcanvas, scrollfont, 2, [{myvalue: 0, amp: 20, inc:0.2, offset: -0.04}]);
+		my3d = new codef3D(mycanvas, 320, 75, 1, 1500 );
+		var lbm = new LineBasicMaterial({color: 0x801234, linewidth:2});
+		my3d.line({x:20, y:50, z:0}, {x:110, y:50, z:0}, lbm);
+		my3d.line({x:20, y:50, z:0}, {x:20, y:-100, z:0}, lbm);
+		my3d.line({x:20, y:-100, z:0}, {x:110, y:-100, z:0}, lbm);
+		my3d.line({x:110, y:50,z:0}, {x:110, y:-100, z:0}, lbm);
+				
+		my3d.line({x:40, y:0, z:0}, {x:80, y:0, z:0}, lbm);
+		my3d.line({x:40, y:0, z:0}, {x:40, y:50, z:0}, lbm);
+		my3d.line({x:80, y:0, z:0}, {x:80, y:50, z:0}, lbm);
+				
+		my3d.line({x:60, y:5, z:0}, {x:60, y:45, z:0}, lbm);
+		my3d.line({x:60, y:5, z:0}, {x:75, y:5, z:0}, lbm);
+		my3d.line({x:60, y:45, z:0}, {x:75, y:45, z:0}, lbm);
+		my3d.line({x:75, y:5,z:0}, {x:75, y:45, z:0}, lbm);
+				
+		my3d.line({x:35, y:-10, z:0}, {x:35, y:-30, z:0}, lbm);
+		my3d.line({x:35, y:-20, z:0}, {x:40, y:-20, z:0}, lbm);
+		my3d.line({x:40, y:-20, z:0}, {x:40, y:-30, z:0}, lbm);
+		my3d.line({x:35, y:-30, z:0}, {x:40, y:-30, z:0}, lbm);
+				
+		my3d.line({x:45, y:-20, z:0}, {x:45, y:-30, z:0}, lbm);
+		my3d.line({x:45, y:-20, z:0}, {x:50, y:-20, z:0}, lbm);
+		my3d.line({x:50, y:-20, z:0}, {x:50, y:-30, z:0}, lbm);
+		my3d.line({x:45, y:-30, z:0}, {x:50, y:-30, z:0}, lbm);
+				
+		my3d.line({x:55, y:-20, z:0}, {x:55, y:-30, z:0}, lbm);
+		my3d.line({x:55, y:-20, z:0}, {x:60, y:-20, z:0}, lbm);
+		my3d.line({x:60, y:-20, z:0}, {x:60, y:-30, z:0}, lbm);
+		my3d.line({x:55, y:-30, z:0}, {x:60, y:-30, z:0}, lbm);
+				
+		my3d.line({x:65, y:-10, z:0}, {x:65, y:-30, z:0}, lbm);
+		my3d.line({x:65, y:-20, z:0}, {x:70, y:-20, z:0}, lbm);
+		my3d.line({x:65, y:-30, z:0}, {x:70, y:-30, z:0}, lbm);
+				
+		my3d.line({x:75, y:-10, z:0}, {x:75, y:-30, z:0}, lbm);
+		my3d.line({x:75, y:-20, z:0}, {x:80, y:-15, z:0}, lbm);
+		my3d.line({x:75, y:-20, z:0}, {x:80, y:-30, z:0}, lbm);
+				
+		my3d.line({x:85, y:-20, z:0}, {x:85, y:-30, z:0}, lbm);
+		my3d.line({x:85, y:-10, z:0}, {x:85, y:-11, z:0}, lbm);
+				
+		my3d.line({x:90, y:-10, z:0}, {x:90, y:-30, z:0}, lbm);
+		my3d.line({x:90, y:-20, z:0}, {x:95, y:-20, z:0}, lbm);
+		my3d.line({x:90, y:-30, z:0}, {x:95, y:-30, z:0}, lbm);
+		
+		doCanvas();
+		doFirstPart(function() { doSecondPart(function() { }); });
+		//doSecondPart(function() { })
+	});
+	});
+}
+
+function arc3d(my3d,segmentCount,radius,material,xpir) {
+	var geometry = new THREE.Geometry();
+
+	for (var i = 0; i <= segmentCount; i++) {
+		var theta = (i / segmentCount) * Math.PI * xpir;
+		geometry.vertices.push(
+			new THREE.Vector3(
+				Math.cos(theta) * radius,
+				Math.sin(theta) * radius,
+				0));         
+	}
+	my3d.group.add(new THREE.Line(geometry, material));
+}
+
+
+</script></head>
+<body onLoad="startTro();">
+<div id="main"></div>
+<div id="textHdr"></div>
+<div id="text"></div>
+<noscript id="textNSH">
+       _____      __________       ______                   _____
+_______T¯¯¯7___   T¯¯¯7¯¯¯¯7_______T¯¯¯¯7__________  ____   T¯¯¯7______________
+¯¯¯¯¯¯¯|   |¯¯7   |   |    |¯¯¯¯¯¯¯|    |¯¯¯¯¯¯¯¯¯¯\ T  7   |   |¯¯¯¯¯¯¯¯¯¯¯¯¯T
+    ___j   |  |   |   |    l___    l____j    ____   \|  |   |   |         ____j
+   &lt;¯¯¯|   |  l   |   |    |¯¯¯&gt;   T¯¯¯¯7    T¯¯¯&gt;   |  l   |   |\        \¯¯¯¯
+    \  |   |   \  |   |    |  /    |    |    |  /    |   \  |   | \        \ 
+     \_j   |    \_j   |    l_/     |    |    l_/     |    \_j   |__&gt;        \_
+      ¯¯   |     ¯¯   |    ¯¯      |    |    ¯¯      |     ¯¯   |¯¯          T
+\          |          |           /|    |           /|          |            |
+ \_________j__________j__________/ l____j__________/ l__________j____________j
+T ¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯  ¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯  ¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯7
+|  dubious disk ::  the porygon-z that's super effective against secure boot! |
+:          ________                                                           :
+'__________T¯¯¯¯¯¯7 ___________________________ _______ ______________________`
+¯¯¯¯¯¯¯¯¯¯¯|      |/¯¯¯¯¯7¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯7 T¯¯¯¯¯7 T¯¯¯¯T¯¯¯¯¯T¯¯7¯7¯¯¯¯7
+           |      |\_____j     ________       | |     | |    |     |  | |    |
+           |      | ¯¯¯¯¯|     \¯¯¯¯¯¯7       | j     j |    |     l__j |    |
+   ________j      |______|      \     |       |/¯    /¯ |    l__________j    |
+  &lt;¯¯¯¯¯¯¯¯|      |¯¯¯¯¯¯7\      \    |       ¯     /   |    ¯¯¯¯¯¯¯¯¯¯¯¯    |
+   \       |      |      | \      \   |            &lt;    | __________________ |
+    \______j      |      |  \      \_ |       _     \   | |                | |
+     ¯¯¯¯¯¯¯      |      |___&gt;      T |       |\_    \_ | |                | |
+                  |      |¯¯¯       | |       | T     7 | |                | |
+\                 |      |          | |       | |     | | l________________j |
+ \________________j______j__________j l_______j l_____j l____________________j
+  ¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯ ¯¯¯¯¯¯¯¯¯ ¯¯¯¯¯¯¯ ¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯
+</noscript>
+<noscript id="textNS">
+I reversed bootmgr; late one night,
+Looking for issues; however slight,
+Five tabs in hex-rays open, with drooping eyes,
+When suddenly, to my surprise...
+
+dubious disk
+  (CVE-2022-30203, CVE-2023-21560, CVE-2023-28269, CVE-2023-28249, and more...)
+
+Overly permissive code in Windows boot environment allows for overwriting
+arbitrary memory, and therefore, arbitrary code execution.
+
+  When reversing the Windows boot environment, I noticed that the devices that
+can actually be represented, and the devices that bcdedit.exe ALLOWS to be
+represented, are slightly different. Specifically, bcdedit only allows you to
+specify certain types of devices, whereas the boot environment supports just
+about any device structure that looks valid.
+
+  So you can specify, for example, a vhd inside a wim, and the boot environment
+will happily open and read from this device, even though bcdedit might not let
+you actually represent it, if you can put it inside a BCD, the boot enviroment
+will be perfectly fine with it.
+
+  So I wrote a mod for bcdedit, unimaginatively called "bcdeditmod", that
+hooks the various functions, to allow bcdedit to show and parse a new boot
+device format that can handle basically anything that can be put in the device
+structure.
+
+  But what are these device structures, anyway?
+
+  They are located in the BCD (which is a registry hive), as REG_BINARY data.
+
+  They consist of a header, followed by a device-specific body, and the header
+is a structure like so:
+
+typedef struct _BOOT_ENVIRONMENT_DEVICE_HEADER
+{
+	DWORD DeviceType;
+	DWORD Flags;
+	DWORD Size;
+	DWORD Pad;
+} BOOT_ENVIRONMENT_DEVICE_HEADER, * PBOOT_ENVIRONMENT_DEVICE_HEADER;
+
+  where DeviceType is the type of the device (body), Size is the total size of
+the device structure, Pad is unused padding (set to zero), and Flags is a set
+of bitflags.
+
+  ...a set of bitflags?
+
+  When looking at bcdedit, it sets bit 0 of these flags always, when writing a
+ramdisk device, which itself is a sub-type of device type block I/O.
+
+  Bit 0 was never set when writing out any other type of device, just this one.
+
+  So what's so special about bit 0?
+
+  If bit 0 is set on a device, then the boot environment won't open it. It
+means the device has to be created first - the actual interesting data of the
+device is zeroed out in the BCD, and initialised at runtime by the device
+creation function, which also unsets bit 0 when it's done.
+
+  OK, so what does a block IO device of type ramdisk look like after the
+header?
+
+  The block IO device body starts with a DWORD SubType - which for ramdisk
+devices is value 3. There follows the actual device body after that. For
+ramdisk devices this is the following structure:
+
+typedef struct _RAM_DISK_IDENTIFIER {
+	LARGE_INTEGER ImageBase;
+	ULONG64 ImageSize;
+	DWORD ImageOffset;
+	FILE_IDENTIFIER Source;
+} RAM_DISK_IDENTIFIER, *PRAM_DISK_IDENTIFIER;
+
+  The Source element is the only part that gets filled in by bcdedit, it's a
+FILE_PATH structure, which basically consists of another boot device
+structure in its entirety, followed by a UTF-16LE path string. This is the
+full location to the file that gets loaded into memory by the ramdisk device
+creation function.
+
+  The ramdisk device creation function gets the file size, allocates some
+memory, reads the entire file there, then places the physical address of that
+memory into the ImageBase and ImageOffset elements (ImageBase gets the page-
+aligned base address, and ImageOffset gets the offset into that page where that
+file was read to), and ImageSize gets the size of the file.
+
+  After this small explanation, you may wonder what happened if you just unset
+bit 0 of the device flags.
+
+  It turned out, that the boot environment would be perfectly happy with this,
+and would just use whatever values were in the structure read from the BCD for
+the physical address and size of the ramdisk.
+
+  So, what can we do with this?
+
+  When a Windows boot application opens this crafted ramdisk device, if it
+reads from this device, that turns into a memcpy FROM the attacker-specified
+ramdisk area. A write turns into a memcpy TO the attacker-specified ramdisk
+area.
+
+  Which means, with the right crafted ramdisk device (physical address, length
+and data), a boot application could end up writing to this ramdisk which would
+lead to the data being written at a wholly attacker controlled address.
+
+  Therefore, potentially gaining code execution under a boot application, which
+breaks *at least* Secure Boot, and it would also be guaranteed to allow for
+BitLocker key dumping, where the osvolume is protected by BitLocker, with the
+VMK sealed by TPM only, and Secure Boot used for integrity validation, which
+happens to be the default settings (and the ONLY possible setting on Home
+editions of Windows). If a system had automatic BitLocker enabled, again the
+vulnerable configuration would be guaranteed, unless it was changed manually by
+the user afterwards.
+
+  So, what boot applications can write to a boot device, as opposed to read?
+
+  There aren't that many places across the Windows boot environment that
+actually writes to disk.
+
+  First, there's some BCD-related code, but that's not very helpful as it will
+always write the entire hive from memory back to disk.
+
+  Second, there's a 32-bit write of a constant to a hibernation file under
+winresume.efi. Which could very well be useful, one use for this could be a
+data-only attack where the write is pointed very precisely to the loaded
+Secure Boot Policy in bootmgr's heap, allowing for exactly one "dangerous"
+boot option to be overwritten from the blocklist, which would be enough to
+allow, say "nointegritychecks" which allows to load a self-signed PE as a
+boot application.
+
+  Third, there's the boot status data logging code.
+
+  The boot status data logging code writes to an attacker-specfied path on an
+attacker-specified device in the BCD.
+
+  It is written to by at least winload and winresume, and before RS3, bootmgr
+also has code to do the write after the BCD is loaded (starting from RS3,
+bootmgr does it before the BCD is loaded, so will always write to the EFIESP)
+
+  That the vulnerable code path can be reached in bootmgr, means that before
+RS3, one can potentially gain code execution in bootmgr. This is important as
+this would be before bootmgr extends a cap event to TPM PCR11, which means any
+payload could derive then dump BitLocker keys where legacy integrity validation
+is used too (where the version of bootmgr being used to boot the system is
+vulnerable).
+
+  The really interesting thing about this is that means this vulnerability can
+be useful on systems without Secure Boot, or even those booting from BIOS, to
+dump BitLocker keys, and even Windows Vista and 7 are affected; the issue
+appears to date from Windows Vista build 5259 from November 2005, the earliest
+available build that uses BCD (previous builds had bootmgr but only had support
+for using boot.ini).
+
+  After RS3, the boot status data log writes are done during boot application
+initialisation for winload and winresume... before the Secure Boot policy gets
+loaded. Which means any elements blocked by Secure Boot policy (which includes
+the default boot status data logging device, when bitlocker with TPM is being
+used) are accessible.
+
+  So, what kind of ramdisk contents are required?
+
+  Given that a file on disk is being written to, one needs to craft a
+filesystem image, that appears to be big enough to reach past the actual size
+of the file.
+
+  The easiest, of course, would be FAT32. Even a malformed filesystem which
+only allows for a single sector to be written would be enough.
+
+  So what data gets written? Turns out it's mostly static, in bootmgr:
+
+02 00 00 00 10 00 00 00 00 00 01 00 50 00 00 00
+lo lo lo lo hi hi hi hi g0 g0 g0 g0 g1 g1 g1 g1
+g2 g2 g2 g2 g3 g3 g3 g3 40 00 00 00 01 00 00 00
+02 00 00 00 01 00 00 00 yy yy mm mm dd dd hh hh
+mm mm ss ss ms ms wd wd 01 00 00 00 00 00 00 00
+
+  The variable parts: at 0x10, 64-bit seconds count; at 0x18, a GUID which
+when not exploiting bootmgr is entirely attacker controlled; at 0x38, a time
+structure: 16-bit year, 16-bit month, 16-bit day, 16-bit hour, 16-bit minute,
+16-bit second, 16-bit millisecond, followed by 16-bit day of week (0 to 6, or
+7 if not implemented). (The time structure is TIME_FIELDS from NT.)
+
+  In practise, the top 8 bits of most of the TIME_FIELDS elements are
+guaranteed to be zero, and for the milliseconds case, guaranteed to be 0, 1, 2
+or 3.
+
+  So, what to overwrite? There's lots of interesting things in .data section of
+a boot application, and that is either always loaded at a constant address (in
+the case of bootmgr) or can be loaded at a known address (in other cases).
+
+  Before RS3, the vtables for all the boot devices are stored in .data, which
+means overwriting the Open() pointer for a certain device to a location where
+a payload already got written to means we win.
+
+  Since RS4, the serial port driver uses vtables located in .data, of which one
+of the function pointers gets called on open.
+
+  This means that overwriting either a serial port driver vtable, or the serial
+port boot device vtable, will get code execution later on if a BCD device that
+is opened later is configured to be of type serial port.
+
+  (Which can't be specified in bcdedit of course, but is again a valid device
+that can be represented in the BCD!)
+
+  I chose to craft offsets such that the function pointer gets overwritten by
+offset 0x45 on AMD64 architecture. This would lead to a physical address of
+0x00000000_01000x0y, where x is between 0-7 and y is between 0-3.
+
+  One can then ensure at every 0x100 bytes there's four nops followed by a jump
+to next 0x100, and then at 0x700 a jump to the actual payload.
+
+  How to get a payload into memory? When exploiting a second stage boot
+application (winload, winresume, etc) it's easy enough, just use a properly
+specified ramdisk in the boot object, of some random custom device type.
+However, when exploiting bootmgr, this is more difficult as the write happens
+quite early into boot. But there's one thing loaded after the BCD is parsed
+but before the write happens: the .mui file.
+
+  This is supposed to be a PE file, but starting from Windows 8 a cache is used
+when a file has a size that is not sector-aligned. The entire file gets
+preloaded to that cache when needed, so it doesn't even need to be a valid PE
+file. But in Windows 7 and below, it has to go through the PE loader. However,
+the PE file does not get wiped from memory after the signature check fails here,
+so that PE loader can just be abused here as a way to load arbitrary data into
+memory.
+
+  There are several ways to ensure that everything is loaded at the "correct"
+place. For example, avoidlowmemory BCD element (which is basically entirely
+blocked now since baton drop also used it), or badmemorylist (which is still
+fine to use, for the most part).
+
+  The interesting thing about badmemorylist is that any consecutive ranges get
+merged together, and if any of those ranges are already being used then they do
+not get added to the list of physical memory pages to not use. The easiest way
+around this is to use a checkerboard pattern, ie, specify every odd page or
+every even page, and then have two consecutive pages at the end if needed.
+
+  Given our allocations are definitely more than one page, this strategy works
+for forcing allocations to the correct location in physical memory. When using
+the PE loader under Windows 7 and below's bootmgr, one must remember that the
+entire flat PE gets loaded into memory first, then the SizeOfImage gets
+allocated, and PE mapped into that allocation, then the flat PE gets freed
+afterwards. I personally used vmware's debugger to ensure the badmemorylist
+was correct, but there are probably other methods too.
+
+  I also ported everything to BIOS bootmgr, windows 7 and windows 8. Remember
+that bootmgr under BIOS runs in x86 protected mode, even on AMD64 systems. This
+is very helpful for us. Under 32-bit architectures, the FAT32 filesystem in
+memory can reach the entire 32-bit physical address space.
+
+  I will also note that offsets change slightly when targeting winload, for a
+more modern version of winload, offsets are shifted slightly and the 64 bits
+mentioned above is at a location of 0x49 instead of 0x45. Also, the offset of
+the write inside the file is to a different offset in winload, so 0x800 byte
+sectors need to be used there. 
+
+  Note that these exploitation strategies do not mitigate modern (since ~2022)
+EFI memory protection. It should be possible to work around it to ROP to
+victory, but that is left as a further exercise to the reader. I did not do it
+as I was testing in vmware VMs that lack memory protection in boot.
+
+  And now I've explained how the vulnerability works and roughly how one can
+exploit it, let's move on to the patching.
+
+  The initial patch took ~4 months and was ineffective. The boot environment
+knows the memory map so I suggested a fix of walking through it when opening a
+ramdisk as a sane ramdisk is guaranteed to be described by a single entry in
+the boot environment's memory map. The actual "fix" implemented was this: when
+a device has been loaded from the BCD, check if it's a block io device of type
+ramdisk, if so set flags bit 0 (require creation).
+
+  ...Of course, we can control the entire device, so just using the crafted
+ramdisk as a child device of something else, bypasses this check, and allows
+for exploitation of the same vulnerability.
+
+  When this was reported, a better fix came. Now it walks the device structure,
+with code to handle all supported device types, to find specific child devices
+to set the flags bit 0 on (and as a bonus the interesting structure elements
+get zeroed). If more than 8 child devices were present, the function returned
+error, and if a child device was unknown the function returned success.
+
+  The first issue I discovered was that this function was backported to older
+major Windows versions incorrectly and all code relating to device types
+unsupported by that version of bootmgr was removed. The issue is that one could
+use an older bootmgr with a device that would fail the checks in later bootmgr,
+and then load a later version of winload which has code to support that device,
+and continue to exploit the vulnerability. Iron introduced support for the
+"composite" device type, meant to require creation, that contains two child
+devices, and when opening a file, if it is not found on the first device, the
+second one is used. So one could just set such a device up and have a child
+device be a crafted ramdisk.
+
+  The second was that when parsing a partition of a VHD block io device, the
+incorrect offset was used when calculating the pointer to the child device,
+and so instead the data used for the following "child device" was actually the
+MBR signature or GPT GUID. Given that the function returns success on invalid
+devices, just putting the crafted FAT image inside a VHD, which itself is
+inside a FAT image, allows for the crafted ramdisk to again be used.
+Technically such a fixed size VHD requires a footer rather than a header but
+due to an oversight the boot environment allows a header to be used (the data
+from last 0x200 bytes is used for checking the VHD type, instead of the data
+from first 0x200 bytes).
+
+  When these were fixed, there remained another exploitation method. Windows
+8.1 added "wimboot" support, allowing for Windows to boot directly from a WIM
+file (by use of NTFS overlays); any updated system files get written to disk.
+This was implemented by use of an on-disk configuration file storing boot
+device structures directly. Because the boot device structure checks were
+performed during BCD load, using a wimboot overlay would not only bypass the
+checks but a crafted ramdisk could be used by a vulnerable second stage boot
+application without bootmgr knowing anything about it.
+
+  Post-exploitation, one can dump BitLocker keys; if code execution was
+obtained inside bootmgr, the payload can unseal BitLocker keys by TPM.
+
+  Additionally, an evil cleaner attack could set up an EFIESP to exploit this
+vulnerability and then gain code execution after the real user provides any
+credentials required to unlock their boot volume protected by BitLocker.
+
+Disclosure timeline:
+2021-08-20: initial discovery
+2022-01-16: theorising how to exploit
+2022-03-19: initial pocs done
+2022-03-27: reported to MSRC
+2022-07-12: first fix (2022-30203), instantly discovered bypass
+2022-07-13: bypass 1 reported to MSRC
+2023-01-10: second fix (2023-21560), another bypass discovered
+2023-01-13: bypass 2 reported to MSRC
+2023-02-05: additional bypass discovered, reported to MSRC
+2023-04-11: third (2023-28269) and fourth (2023-28249) fixes
+2023-04-19: yet another bypass poc reported to MSRC
+2024-04-09: (yes, almost one whole year later!) fifth fix
+               (cve unknown due to multiple fixes in same update)
+2024-06-01: public disclosure at emfcamp/field-fx
+
+quick exploitro credits:
+code and design: Rairii
+engine code: nonameno
+xm player: a1k0n
+remade topazplus font: dMG/Up Rough & Divine Stylers
+scroller font: unknown
+30-minute long chiptune megamix, perfect for reading long writeups: floppi (RIP...)
+</noscript>
+</body></html>
